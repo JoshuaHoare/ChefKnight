@@ -1,62 +1,132 @@
 # ChefKnight Encyclopedia Platform
 
-ChefKnight is an open-source world-building “wiki” designed specifically for an animated series created by a writer + developer duo.  The goal is to make it effortless to **create** and **organise** lore — kingdoms, characters, regions, items, foods, continents, abilities, weapons, armour, races, religion, timelines, and more — while keeping everything in plain files that can be version-controlled and shared via GitHub.
+ChefKnight is a lightweight Git-driven encyclopedia/wiki platform designed for an animated series story universe. It provides a modern web interface to create, organize, and explore lore — kingdoms, characters, regions, items, foods, continents, abilities, weapons, armour, races, religions, and more — while keeping all content in plain Markdown files with YAML frontmatter that are version-controlled via Git.
 
-## ✨ Key Ideas
+## ✨ Architecture
 
-* **Filesystem-driven content** – Every piece of lore is a file or folder inside the repo.  For example:
-  ```text
-  ChefKnight/
-  ├── kingdoms/
-  │   ├── avalon/
-  │   │   ├── _meta.yaml   # core facts about the kingdom
-  │   │   └── README.md    # long-form description / history
-  │   └── nifelheim/
-  ├── characters/
-  │   ├── arthur_the_bold/
-  │   │   ├── _meta.yaml   # tags: [avalon]
-  │   │   └── README.md
-  │   └── helga_iceborn/
-  └── regions/
-  ```
-* **Tags & cross-linking** – Metadata (`_meta.yaml`) stores tags like `kingdom: avalon`, allowing the UI to pull all characters, locations, items, etc., related to a selected kingdom.
-* **Content generation** – The app will provide forms / wizards to create new kingdoms, characters, etc. Submissions automatically create the correct folder + boilerplate files.
-* **Git-native collaboration** – Each contributor keeps their own fork/clone.  The app can check for upstream changes and `git pull` them automatically.
+* **Separate Content Repository** - Content is stored in a dedicated Git repository ([ChefKnight-Encyclopedia](https://github.com/JoshuaHoare/ChefKnight-Encyclopedia)) managed as a subrepo/submodule.
+* **FastAPI Backend** - RESTful API that serves content and manages Git operations.
+* **Static Frontend** - Currently a placeholder (will be implemented with React in the future).
+* **Docker Containerization** - Easy deployment with Docker Compose.
+* **Git Integration** - Pull/push operations to sync content with remote repository.
 
-## 🗺️ Planned Directory Structure
+## 📁 Project Structure
 
 ```
-kingdoms/      # Top-level political entities
-characters/    # All characters, tagged to kingdoms/regions
-regions/       # Geographic areas (provinces, forests, seas…)
-continents/    # Large landmasses spanning multiple regions
-races/         # Sapient species or ethnic groups
-foods/         # Cuisine, dishes, ingredients
-abilities/     # Magical powers or special skills
-weapons/       # Armaments
-armour/        # Protective gear
-items/         # Artifacts, key objects not covered above
-religion/      # Deities, belief systems
-lore/          # Myths, events, timelines, miscellaneous articles
-ui/            # Front-end application (e.g., Next.js / SvelteKit)
-backend/       # API & logic (e.g., Python FastAPI / Node Express)
+ChefKnight/               # Main repository
+├── backend/              # Python backend
+│   ├── app/              # Application code
+│   │   ├── main.py       # FastAPI application
+│   │   └── __init__.py
+│   └── requirements.txt  # Python dependencies
+├── static/               # Frontend assets (placeholder)
+├── data/                 # Content repository (Git subrepo)
+│   ├── kingdoms/         # Kingdom entries
+│   ├── characters/       # Character entries
+│   └── ... (other content)
+├── docker-compose.yml    # Docker configuration
+└── Dockerfile           # Docker build instructions
 ```
 
-## 🚀 Roadmap (draft)
+## 🚀 Key Features
 
-1. Bootstrap repo with base folders & sample content templates.
-2. Choose tech stack for the interactive UI (e.g., Electron + SvelteKit or Pure Web).
-3. Implement content generator: create-kingdom ▶ creates folder + stub files.
-4. Build tag parser that aggregates content for a selected kingdom.
-5. Add convenient Git synchronisation commands from within the UI.
-6. Package app for local use & optionally deploy a read-only public site.
+* **Markdown + YAML Content** - All content is stored as Markdown files with YAML frontmatter metadata.
+* **Git-Powered Version Control** - Track changes, collaborate with multiple editors.
+* **API Endpoints** - `/api/status`, `/api/pull`, `/api/push` for Git operations.
+* **Content Organization** - Structured by category (kingdoms, characters, etc.)
 
-## 🤔 Open Questions
+## 🛠️ Setup Instructions
 
-1. **Tech stack preference?**  Web (React/Svelte) vs. desktop (Electron/Tauri)?
-2. **Content format?**  Markdown + YAML front-matter, pure JSON, or something else?
-3. **Auto-sync behaviour?**  Should the app `git pull` on start-up, on a timer, or manually?
-4. **Access control?**  Will there be private vs. public lore sections?
-5. **Versioning of generated assets** (images, audio) if those will be added later?
+### Prerequisites
 
-Please let me know your thoughts so we can refine the plan and start scaffolding the project!
+- Git
+- Docker and Docker Compose
+
+### Step 1: Clone the main repository
+
+```bash
+git clone https://github.com/JoshuaHoare/ChefKnight.git
+cd ChefKnight
+```
+
+### Step 2: Clone the content repository
+
+```bash
+git clone https://github.com/JoshuaHoare/ChefKnight-Encyclopedia.git data
+```
+
+### Step 3: Build and start the Docker containers
+
+```bash
+docker compose up -d --build
+```
+
+### Step 4: Access the application
+
+- API: http://localhost:8000/api/status
+- Frontend: http://localhost:8000/
+
+### Step 5: Making content changes
+
+1. Edit/add Markdown files in the `data/` directory
+2. Commit changes to the content repository:
+   ```bash
+   cd data
+   git add .
+   git commit -m "Add new content"
+   git push origin main
+   ```
+3. Pull changes from the API:
+   ```bash
+   curl -X POST http://localhost:8000/api/pull
+   ```
+
+## 📝 API Documentation
+
+### GET /api/status
+Returns information about the content repository state.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "folders": ["kingdoms", "characters", ...],
+  "content": {
+    "kingdoms": ["aldoria"],
+    "characters": ["chef_brandish"],
+    ...
+  },
+  "git": {
+    "branch": "main",
+    "commit": "f65aa16",
+    "dirty": false,
+    "empty": false
+  },
+  "timestamp": 1750577526.345382
+}
+```
+
+### POST /api/pull
+Pulls the latest content from the remote repository.
+
+### POST /api/push
+Commits changes and pushes them to the remote repository.
+
+**Request Body:**
+```json
+{
+  "msg": "Update content via UI"
+}
+```
+
+## 🚀 Next Steps
+
+1. ✅ Set up main repository and content subrepo structure
+2. ✅ Implement FastAPI backend with Git operations
+3. ✅ Create Docker containerization
+4. ⬜ Develop React frontend for browsing content
+5. ⬜ Add content editing capabilities to the UI
+6. ⬜ Implement search functionality
+7. ⬜ Add user authentication and access control
+8. ⬜ Create content templates and wizards
