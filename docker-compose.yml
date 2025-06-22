@@ -1,7 +1,9 @@
-version: "3.9"
+# Docker Compose configuration for ChefKnight
 services:
   chefknight:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     volumes:
       - ./data:/app/data
     ports:

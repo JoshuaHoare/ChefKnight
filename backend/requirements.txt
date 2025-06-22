@@ -1,5 +1,6 @@
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
+GitPython==3.1.43
 watchdog==4.0.0
 markdown-it-py==3.0.0
 PyYAML==6.0.1
