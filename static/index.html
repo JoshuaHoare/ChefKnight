@@ -2,10 +2,427 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>ChefKnight</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChefKnight Encyclopedia</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f8f9fa;
+    }
+    .sidebar {
+      background-color: #fff;
+      border-right: 1px solid #dee2e6;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .content-area {
+      padding: 20px;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .navbar {
+      border-bottom: 1px solid #dee2e6;
+      background-color: #fff;
+    }
+    .category-header {
+      font-weight: 600;
+      cursor: pointer;
+      padding: 10px 15px;
+      display: flex;
+      align-items: center;
+    }
+    .category-header:hover {
+      background-color: #f8f9fa;
+    }
+    .category-icon {
+      margin-right: 8px;
+      color: #ffc107;
+    }
+    .item-list {
+      padding-left: 15px;
+    }
+    .content-item {
+      padding: 6px 15px;
+      cursor: pointer;
+      display: block;
+      color: #212529;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .content-item:hover {
+      background-color: #f8f9fa;
+      color: #0d6efd;
+    }
+    .content-item.active {
+      background-color: #e9ecef;
+      color: #0d6efd;
+      font-weight: 500;
+    }
+    .loading-spinner {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+    }
+    .metadata-box {
+      background-color: #f8f9fa;
+      border-radius: 4px;
+      padding: 15px;
+      margin-bottom: 20px;
+    }
+    .metadata-label {
+      color: #6c757d;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+    .metadata-value {
+      margin-bottom: 10px;
+    }
+    .tag {
+      background-color: #e9ecef;
+      border-radius: 15px;
+      padding: 3px 10px;
+      font-size: 0.8rem;
+      margin-right: 5px;
+      display: inline-block;
+      margin-bottom: 5px;
+    }
+    .badge-git {
+      background-color: #24292e;
+      color: white;
+    }
+    .badge-dirty {
+      background-color: #ffc107;
+      color: #212529;
+    }
+  </style>
 </head>
 <body>
-  <h1>ChefKnight Wiki</h1>
-  <p>Backend is running. Front-end scaffold will be generated later.</p>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-light px-3">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">ChefKnight Encyclopedia</a>
+      <div class="d-flex align-items-center">
+        <div id="git-status" class="me-2"></div>
+        <button id="btn-pull" class="btn btn-sm btn-outline-primary me-2" title="Pull latest content">
+          <i class="bi bi-cloud-download"></i> Pull
+        </button>
+        <button id="btn-push" class="btn btn-sm btn-success" title="Push changes">
+          <i class="bi bi-cloud-upload"></i> Push
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="container-fluid">
+    <div class="row">
+      <!-- Sidebar -->
+      <div class="col-md-3 col-lg-2 sidebar p-0" id="sidebar">
+        <div id="sidebar-loading" class="loading-spinner py-4">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+        </div>
+        <div id="sidebar-content" class="d-none">
+          <!-- Categories will be populated here -->
+        </div>
+      </div>
+
+      <!-- Content Area -->
+      <div class="col-md-9 col-lg-10 content-area">
+        <div id="content-loading" class="loading-spinner d-none">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+        </div>
+        <div id="content-placeholder" class="text-center py-5 text-muted">
+          <h4>Select an entry from the sidebar</h4>
+          <p>Choose a category and entry to view its content</p>
+        </div>
+        <div id="content-view" class="d-none">
+          <div id="content-metadata" class="metadata-box"></div>
+          <div id="content-markdown" class="markdown-content"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dependencies -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"></script>
+  
+  <!-- App Script -->
+  <script>
+    // Initialize the application
+    document.addEventListener('DOMContentLoaded', () => {
+      // Fetch API Status
+      fetchApiStatus();
+      
+      // Set up event listeners
+      document.getElementById('btn-pull').addEventListener('click', handlePull);
+      document.getElementById('btn-push').addEventListener('click', handlePush);
+    });
+    
+    // API Interaction Functions
+    async function fetchApiStatus() {
+      try {
+        const response = await fetch('/api/status');
+        const data = await response.json();
+        
+        // Update UI with status information
+        updateGitStatus(data.git);
+        renderSidebar(data.folders, data.content);
+      } catch (error) {
+        console.error('Error fetching API status:', error);
+        showErrorMessage('Failed to load content. Please try again.');
+      }
+    }
+    
+    async function fetchContentFile(folder, file) {
+      try {
+        showContentLoading(true);
+        const response = await fetch(`/api/content/${folder}/${file}`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        renderContent(data.metadata, data.content, folder, file);
+      } catch (error) {
+        console.error('Error fetching content file:', error);
+        showErrorMessage('Failed to load content file. Please try again.');
+      } finally {
+        showContentLoading(false);
+      }
+    }
+    
+    async function handlePull() {
+      try {
+        const pullBtn = document.getElementById('btn-pull');
+        pullBtn.disabled = true;
+        pullBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Pulling...';
+        
+        const response = await fetch('/api/pull', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.ok) {
+          showSuccessMessage('Successfully pulled latest changes');
+          // Refresh the data
+          fetchApiStatus();
+        } else {
+          showErrorMessage(`Pull failed: ${data.message}`);
+        }
+      } catch (error) {
+        console.error('Error during pull:', error);
+        showErrorMessage('Failed to pull changes. Please try again.');
+      } finally {
+        const pullBtn = document.getElementById('btn-pull');
+        pullBtn.disabled = false;
+        pullBtn.innerHTML = '<i class="bi bi-cloud-download"></i> Pull';
+      }
+    }
+    
+    async function handlePush() {
+      try {
+        const message = prompt('Enter commit message:', 'Update content');
+        
+        if (!message) return; // User canceled
+        
+        const pushBtn = document.getElementById('btn-push');
+        pushBtn.disabled = true;
+        pushBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Pushing...';
+        
+        const response = await fetch('/api/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ msg: message })
+        });
+        
+        const data = await response.json();
+        
+        if (data.ok) {
+          showSuccessMessage('Successfully pushed changes');
+          // Refresh the data
+          fetchApiStatus();
+        } else {
+          showErrorMessage(`Push failed: ${data.message}`);
+        }
+      } catch (error) {
+        console.error('Error during push:', error);
+        showErrorMessage('Failed to push changes. Please try again.');
+      } finally {
+        const pushBtn = document.getElementById('btn-push');
+        pushBtn.disabled = false;
+        pushBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> Push';
+      }
+    }
+    
+    // UI Functions
+    function updateGitStatus(git) {
+      const statusElement = document.getElementById('git-status');
+      
+      if (!git || git.branch === 'none') {
+        statusElement.innerHTML = '';
+        return;
+      }
+      
+      // Create badges for branch and commit
+      let html = `<span class="badge badge-git">${git.branch}@${git.commit}</span> `;
+      
+      // Add dirty badge if needed
+      if (git.dirty) {
+        html += `<span class="badge badge-dirty">Modified</span>`;
+      }
+      
+      statusElement.innerHTML = html;
+    }
+    
+    function renderSidebar(folders, content) {
+      const sidebarContent = document.getElementById('sidebar-content');
+      const sidebarLoading = document.getElementById('sidebar-loading');
+      
+      // Clear existing content
+      sidebarContent.innerHTML = '';
+      
+      // Add each folder
+      folders.forEach(folder => {
+        // Skip hidden folders
+        if (folder.startsWith('.')) return;
+        
+        const folderFiles = content[folder] || [];
+        const folderElement = document.createElement('div');
+        folderElement.className = 'category-section';
+        
+        // Create folder header
+        const folderHeader = document.createElement('div');
+        folderHeader.className = 'category-header';
+        folderHeader.innerHTML = `
+          <i class="bi bi-folder-fill category-icon"></i>
+          <span class="text-capitalize">${folder}</span>
+        `;
+        
+        // Create list container
+        const itemList = document.createElement('div');
+        itemList.className = 'item-list collapse';
+        itemList.id = `category-${folder}`;
+        
+        // Add click listener to toggle folder
+        folderHeader.addEventListener('click', () => {
+          const collapseElement = new bootstrap.Collapse(itemList, { toggle: true });
+        });
+        
+        // Add files to the folder
+        if (folderFiles.length > 0) {
+          folderFiles.forEach(file => {
+            const fileItem = document.createElement('a');
+            fileItem.className = 'content-item';
+            fileItem.href = '#';
+            fileItem.textContent = file;
+            fileItem.addEventListener('click', (e) => {
+              e.preventDefault();
+              
+              // Remove active class from all items
+              document.querySelectorAll('.content-item').forEach(item => {
+                item.classList.remove('active');
+              });
+              
+              // Add active class to clicked item
+              fileItem.classList.add('active');
+              
+              // Fetch and display the content
+              fetchContentFile(folder, file);
+            });
+            
+            itemList.appendChild(fileItem);
+          });
+        } else {
+          // Empty folder message
+          const emptyMessage = document.createElement('div');
+          emptyMessage.className = 'p-2 text-muted small';
+          emptyMessage.textContent = 'No entries yet';
+          itemList.appendChild(emptyMessage);
+        }
+        
+        // Add elements to the sidebar
+        folderElement.appendChild(folderHeader);
+        folderElement.appendChild(itemList);
+        sidebarContent.appendChild(folderElement);
+      });
+      
+      // Show sidebar and hide loading
+      sidebarLoading.classList.add('d-none');
+      sidebarContent.classList.remove('d-none');
+    }
+    
+    function renderContent(metadata, content, folder, file) {
+      const contentView = document.getElementById('content-view');
+      const contentPlaceholder = document.getElementById('content-placeholder');
+      const metadataElement = document.getElementById('content-metadata');
+      const markdownElement = document.getElementById('content-markdown');
+      
+      // Hide placeholder and show content
+      contentPlaceholder.classList.add('d-none');
+      contentView.classList.remove('d-none');
+      
+      // Render metadata
+      let metadataHtml = '';
+      
+      if (metadata && Object.keys(metadata).length > 0) {
+        for (const [key, value] of Object.entries(metadata)) {
+          metadataHtml += `<div class="mb-3">`;
+          metadataHtml += `<div class="metadata-label">${key}</div>`;
+          
+          if (Array.isArray(value)) {
+            metadataHtml += `<div class="metadata-value">`;
+            value.forEach(item => {
+              metadataHtml += `<span class="tag">${item}</span>`;
+            });
+            metadataHtml += `</div>`;
+          } else {
+            metadataHtml += `<div class="metadata-value">${value}</div>`;
+          }
+          
+          metadataHtml += `</div>`;
+        }
+        metadataElement.innerHTML = metadataHtml;
+        metadataElement.classList.remove('d-none');
+      } else {
+        metadataElement.classList.add('d-none');
+      }
+      
+      // Render markdown content
+      markdownElement.innerHTML = marked.parse(content);
+    }
+    
+    function showContentLoading(isLoading) {
+      const contentLoading = document.getElementById('content-loading');
+      const contentView = document.getElementById('content-view');
+      const contentPlaceholder = document.getElementById('content-placeholder');
+      
+      if (isLoading) {
+        contentLoading.classList.remove('d-none');
+        contentView.classList.add('d-none');
+        contentPlaceholder.classList.add('d-none');
+      } else {
+        contentLoading.classList.add('d-none');
+      }
+    }
+    
+    function showErrorMessage(message) {
+      // Simple error message (can be enhanced with a toast or alert component)
+      alert(message);
+    }
+    
+    function showSuccessMessage(message) {
+      // Simple success message (can be enhanced with a toast component)
+      alert(message);
+    }
+  </script>
 </body>
 </html>

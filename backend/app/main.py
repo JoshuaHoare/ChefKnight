@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Optional, List, Any
 import pathlib
@@ -9,8 +9,11 @@ import git
 from git import Repo
 from git.exc import InvalidGitRepositoryError, NoSuchPathError
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 import logging
+import yaml
+import markdown
+import re
 
 # Configure logging
 logging.basicConfig(
@@ -197,10 +200,70 @@ def git_push(msg: str = "Update via UI") -> Dict[str, Any]:
         logging.error(f"Error during push: {e}")
         return {"ok": False, "message": str(e)}
 
+# ---------------- Content API -----------------
+@app.get("/api/content/{folder}/{filename}")
+def get_content_file(folder: str, filename: str):
+    """Get the content of a markdown file with YAML frontmatter"""
+    try:
+        # Validate folder and filename
+        if folder not in DIR_STRUCTURE:
+            raise HTTPException(status_code=404, detail=f"Folder '{folder}' not found")
+            
+        file_path = DATA_DIR / folder / f"{filename}.md"
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail=f"File '{filename}' not found in '{folder}'")
+        
+        # Read the file content
+        content = file_path.read_text(encoding='utf-8')
+        
+        # Extract YAML frontmatter if present
+        metadata = {}
+        markdown_content = content
+        frontmatter_match = re.match(r'^---\n(.+?)\n---\n(.+)$', content, re.DOTALL)
+        
+        if frontmatter_match:
+            try:
+                yaml_text = frontmatter_match.group(1)
+                metadata = yaml.safe_load(yaml_text)
+                markdown_content = frontmatter_match.group(2)
+            except Exception as e:
+                logging.warning(f"Error parsing YAML frontmatter: {e}")
+        
+        return {
+            "metadata": metadata,
+            "content": markdown_content,
+            "path": f"{folder}/{filename}"
+        }
+        
+    except HTTPException as http_ex:
+        raise http_ex
+    except Exception as e:
+        logging.error(f"Error retrieving content file: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ---------------- Static Files -----------------
 if STATIC_DIR.exists():
+    # Serve static assets directly
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-    @app.get("/")
-    def root():
-        return FileResponse(STATIC_DIR / "index.html")
+    
+    # Serve frontend files from /frontend/build if it exists
+    frontend_build_dir = BASE_DIR / "frontend" / "build"
+    if frontend_build_dir.exists():
+        app.mount("/", StaticFiles(directory=frontend_build_dir, html=True), name="frontend")
+    else:
+        @app.get("/")
+        def root():
+            return FileResponse(STATIC_DIR / "index.html")
+            
+    # This ensures React routing works properly
+    @app.get("/{full_path:path}")
+    async def serve_react_routes(full_path: str, request: Request):
+        # API requests should be handled by their specific endpoints
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="API endpoint not found")
+            
+        # For any other path (React routes), serve the React app
+        if frontend_build_dir.exists():
+            return FileResponse(frontend_build_dir / "index.html")
+        else:
+            return FileResponse(STATIC_DIR / "index.html")
